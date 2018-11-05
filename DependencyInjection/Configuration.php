@@ -30,7 +30,7 @@ class Configuration implements ConfigurationInterface
     public function getConfigTreeBuilder()
     {
         $treeBuilder = new TreeBuilder();
-        $rootNode = $treeBuilder->root('sensio_framework_extra', 'array');
+        $rootNode = $treeBuilder->root('sensio_framework_extra');
 
         $rootNode
             ->children()
@@ -65,6 +65,12 @@ class Configuration implements ConfigurationInterface
                     ->children()
                         ->booleanNode('annotations')->defaultTrue()->end()
                         ->scalarNode('expression_language')->defaultValue('sensio_framework_extra.security.expression_language.default')->end()
+                    ->end()
+                ->end()
+                ->arrayNode('csrf')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->booleanNode('annotations')->defaultTrue()->end()
                     ->end()
                 ->end()
                 ->arrayNode('psr_message')
