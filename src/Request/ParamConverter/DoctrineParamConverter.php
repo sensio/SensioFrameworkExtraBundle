@@ -58,6 +58,7 @@ class DoctrineParamConverter implements ParamConverterInterface
             'repository_method' => null,
             'map_method_signature' => false,
             'evict_cache' => false,
+            'throw_notfound' => false,
         ];
 
         $this->defaultOptions = array_merge($defaultValues, $options);
@@ -79,27 +80,65 @@ class DoctrineParamConverter implements ParamConverterInterface
             $configuration->setIsOptional(true);
         }
 
+        $throwNotFound = false === $configuration->isOptional();
         $errorMessage = null;
-        if ($expr = $options['expr']) {
-            $object = $this->findViaExpression($class, $request, $expr, $options, $configuration);
+        $object = null;
+        try {
+            if ($expr = $options['expr']) {
+                $object = $this->findViaExpression($class, $request, $expr, $options, $configuration);
 
-            if (null === $object) {
-                $errorMessage = sprintf('The expression "%s" returned null', $expr);
-            }
-
-            // find by identifier?
-        } elseif (false === $object = $this->find($class, $request, $options, $name)) {
-            // find by criteria
-            if (false === $object = $this->findOneBy($class, $request, $options)) {
-                if ($configuration->isOptional()) {
-                    $object = null;
-                } else {
-                    throw new \LogicException(sprintf('Unable to guess how to get a Doctrine instance from the request information for parameter "%s".', $name));
+                if (null === $object) {
+                    $errorMessage = sprintf('The expression "%s" returned null.', $expr);
                 }
+            } else {
+                // find by identifier?
+                $object = $this->find($class, $request, $options, $name, $id);
+
+                if (null === $object && isset($id)) {
+                    $errorMessage = sprintf('No object identified by "%s".', $id);
+                    if ($options['throw_notfound']) {
+                        $throwNotFound = true;
+                    }
+                }
+
+                if (false === $object) {
+                    // find by criteria
+                    $object = $this->findOneBy($class, $request, $options, $criteria);
+
+                    if (null === $object && $criteria) {
+                        $errorMessage = sprintf(
+                            'No object identified by {%s}.',
+                            implode(', ', array_map(function ($k, $v) {
+                                return sprintf('%s: "%s"', $k, $v);
+                            }, array_keys($criteria), $criteria))
+                        );
+                        if ($options['throw_notfound']) {
+                            $throwNotFound = true;
+                        }
+                    }
+
+                    if (false === $object) {
+                        if ($configuration->isOptional()) {
+                            $object = null;
+                        } else {
+                            throw new \LogicException(sprintf('Unable to guess how to get a Doctrine instance from the request information for parameter "%s".', $name));
+                        }
+                    }
+                }
+            }
+        } catch (NoResultException $e) {
+            if ($options['throw_notfound']) {
+                $errorMessage = $e->getMessage();
+                $throwNotFound = true;
+            }
+        } catch (ConversionException $e) {
+            if ($options['throw_notfound']) {
+                $errorMessage = $e->getMessage();
+                $throwNotFound = true;
             }
         }
 
-        if (null === $object && false === $configuration->isOptional()) {
+        if (null === $object && $throwNotFound) {
             $message = sprintf('%s object not found by the @%s annotation.', $class, $this->getAnnotationName($configuration));
             if ($errorMessage) {
                 $message .= ' '.$errorMessage;
@@ -112,7 +151,7 @@ class DoctrineParamConverter implements ParamConverterInterface
         return true;
     }
 
-    private function find($class, Request $request, $options, $name)
+    private function find($class, Request $request, $options, $name, &$id)
     {
         if ($options['mapping'] || $options['exclude']) {
             return false;
@@ -120,8 +159,10 @@ class DoctrineParamConverter implements ParamConverterInterface
 
         $id = $this->getIdentifier($request, $options, $name);
 
-        if (false === $id || null === $id) {
+        if (false === $id) {
             return false;
+        } elseif (null === $id) {
+            return null;
         }
 
         if ($options['repository_method']) {
@@ -138,13 +179,7 @@ class DoctrineParamConverter implements ParamConverterInterface
             }
         }
 
-        try {
-            return $om->getRepository($class)->$method($id);
-        } catch (NoResultException $e) {
-            return;
-        } catch (ConversionException $e) {
-            return;
-        }
+        return $om->getRepository($class)->$method($id);
     }
 
     private function getIdentifier(Request $request, $options, $name)
@@ -177,7 +212,7 @@ class DoctrineParamConverter implements ParamConverterInterface
         return false;
     }
 
-    private function findOneBy($class, Request $request, $options)
+    private function findOneBy($class, Request $request, $options, &$criteria)
     {
         if (!$options['mapping']) {
             $keys = $request->attributes->keys();
@@ -230,17 +265,11 @@ class DoctrineParamConverter implements ParamConverterInterface
             $repositoryMethod = 'findOneBy';
         }
 
-        try {
-            if ($mapMethodSignature) {
-                return $this->findDataByMapMethodSignature($em, $class, $repositoryMethod, $criteria);
-            }
-
-            return $em->getRepository($class)->$repositoryMethod($criteria);
-        } catch (NoResultException $e) {
-            return;
-        } catch (ConversionException $e) {
-            return;
+        if ($mapMethodSignature) {
+            return $this->findDataByMapMethodSignature($em, $class, $repositoryMethod, $criteria);
         }
+
+        return $em->getRepository($class)->$repositoryMethod($criteria);
     }
 
     private function findDataByMapMethodSignature($em, $class, $repositoryMethod, $criteria)
@@ -272,12 +301,8 @@ class DoctrineParamConverter implements ParamConverterInterface
 
         try {
             return $this->language->evaluate($expression, $variables);
-        } catch (NoResultException $e) {
-            return;
-        } catch (ConversionException $e) {
-            return;
         } catch (SyntaxError $e) {
-            throw new \LogicException(sprintf('Error parsing expression -- %s -- (%s)', $expression, $e->getMessage()), 0, $e);
+            throw new \LogicException(sprintf('Error parsing expression -- "%s" -- (%s).', $expression, $e->getMessage()), 0, $e);
         }
     }
 
@@ -320,7 +345,7 @@ class DoctrineParamConverter implements ParamConverterInterface
 
         $extraKeys = array_diff(array_keys($passedOptions), array_keys($this->defaultOptions));
         if ($extraKeys && $strict) {
-            throw new \InvalidArgumentException(sprintf('Invalid option(s) passed to @%s: %s', $this->getAnnotationName($configuration), implode(', ', $extraKeys)));
+            throw new \InvalidArgumentException(sprintf('Invalid option(s) passed to @%s: "%s".', $this->getAnnotationName($configuration), implode(', ', $extraKeys)));
         }
 
         return array_replace($this->defaultOptions, $passedOptions);
