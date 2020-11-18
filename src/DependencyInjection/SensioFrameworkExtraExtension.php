@@ -17,8 +17,10 @@ use Symfony\Component\Config\FileLocator;
 use Symfony\Component\Config\Resource\ClassExistenceResource;
 use Symfony\Component\DependencyInjection\Alias;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
 use Symfony\Component\DependencyInjection\Loader\XmlFileLoader;
 use Symfony\Component\ExpressionLanguage\ExpressionLanguage;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\DependencyInjection\Extension;
 use Symfony\Component\Security\Core\Authorization\ExpressionLanguage as SecurityExpressionLanguage;
 
@@ -32,7 +34,8 @@ class SensioFrameworkExtraExtension extends Extension
         $configuration = $this->getConfiguration($configs, $container);
         $config = $this->processConfiguration($configuration, $configs);
 
-        $loader = new XmlFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
+        $loader = new XmlFileLoader($container, new FileLocator(\dirname(__DIR__).'/Resources/config'));
+        $phpLoader = new PhpFileLoader($container, new FileLocator(\dirname(__DIR__).'/Resources/config'));
 
         $annotationsToLoad = [];
         $definitionsToRemove = [];
@@ -65,6 +68,13 @@ class SensioFrameworkExtraExtension extends Extension
 
         if ($config['cache']['annotations']) {
             $annotationsToLoad[] = 'cache.xml';
+        }
+
+        if ($config['content_safe']['annotations']) {
+            if (!method_exists(Response::class, 'setContentSafe')) {
+                throw new \LogicException('The ContentSafe annotation can only be used starting from symfony/http-foundation 5.2 or higher.');
+            }
+            $phpLoader->load('content_safe.php');
         }
 
         if ($config['security']['annotations']) {
