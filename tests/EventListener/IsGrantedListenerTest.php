@@ -131,8 +131,6 @@ class IsGrantedListenerTest extends \PHPUnit\Framework\TestCase
         $listener->onKernelControllerArguments($this->createFilterControllerEvent($request));
     }
 
-
-
     public function testExceptionWhenMissingSubjectAttribute()
     {
         $this->expectException(\RuntimeException::class);
