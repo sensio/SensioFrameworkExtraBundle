@@ -36,12 +36,26 @@ class Cache extends ConfigurationAnnotation
     private $maxage;
 
     /**
+     * The percentage to use for the maxage stampede protection.
+     *
+     * @var float|null
+     */
+    private $maxageVariation;
+
+    /**
      * The number of seconds that the response is considered fresh by a public
      * cache like a reverse proxy cache.
      *
      * @var int|string|null
      */
     private $smaxage;
+
+    /**
+     * The percentage to use for the smaxage stampede protection.
+     *
+     * @var float|null
+     */
+    private $smaxageVariation;
 
     /**
      * Whether the response is public or not.
@@ -182,6 +196,21 @@ class Cache extends ConfigurationAnnotation
         return $this->maxage;
     }
 
+    public function setMaxAgeVariation(?float $maxageVariation): void
+    {
+        $this->maxageVariation = $maxageVariation;
+    }
+
+    /**
+     * Returns the variation in percentage.
+     *
+     * @return int|null
+     */
+    public function getMaxAgeVariation(): ?float
+    {
+        return $this->maxageVariation;
+    }
+
     /**
      * Sets the number of seconds for the s-maxage cache-control header field.
      *
@@ -201,6 +230,16 @@ class Cache extends ConfigurationAnnotation
     public function getSMaxAge()
     {
         return $this->smaxage;
+    }
+
+    public function setSMaxAgeVariation(?float $smaxageVariation): void
+    {
+        $this->smaxageVariation = $smaxageVariation;
+    }
+
+    public function getSMaxAgeVariation(): ?float
+    {
+        return $this->smaxageVariation;
     }
 
     /**
