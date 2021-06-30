@@ -35,6 +35,13 @@ class IsGranted extends ConfigurationAnnotation
     private $subject;
 
     /**
+     * Defines if subject can be null/not set.
+     *
+     * @var bool
+     */
+    private $nullableSubject = false;
+
+    /**
      * The message of the exception - has a nice default if not set.
      *
      * @var string
@@ -92,6 +99,16 @@ class IsGranted extends ConfigurationAnnotation
     public function getSubject()
     {
         return $this->subject;
+    }
+
+    public function isSubjectNullable()
+    {
+        return $this->nullableSubject;
+    }
+
+    public function setNullableSubject($nullableSubject)
+    {
+        $this->nullableSubject = $nullableSubject;
     }
 
     public function getMessage()
